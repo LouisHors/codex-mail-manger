@@ -1,0 +1,8 @@
+{
+  "imap_host": "imap.exmail.qq.com",
+  "imap_port": 993,
+  "keychain_service": "ugreenmailimap",
+  "keychain_account": "hors.liu@ugreen.com",
+  "obsidian_output_dir": "/Users/ugreen/Library/Mobile Documents/com~apple~CloudDocs/Documents/Obsidian/SquirrelStock/UgreenMail",
+  "daily_schedule": "09:30"
+}

@@ -26,3 +26,5 @@
 
 ## 进展记录
 - 2026-06-23: 创建任务 - 待开始
+- 2026-06-23: 在隔离 worktree `feature/mail-automation-impl` 中完成首版实现，已覆盖 IMAP collector、Codex 摘要交接、Obsidian 笔记更新、通知、主流程 orchestration、调度脚本与运维文档。
+- 2026-06-23: 当前自动化测试 17 项通过；已验证 `collector.py --dry-run`、`run_summary.py --preview`、`note_writer.py --sample`、`main.py --dry-run`、`launchd` plist lint。
