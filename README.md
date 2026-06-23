@@ -7,17 +7,46 @@ Local mail automation workflow for:
 - updating one Obsidian note per day
 - supporting scheduled and manual reruns
 
-## Current status
-
-This repository currently contains the planning docs and the initial project skeleton.
-
-## Planned structure
+## Structure
 
 - `docs/` project plans, task tracking, and operator docs
 - `src/` workflow implementation
 - `tests/` automated tests
 - `scripts/` local runner scripts
 - `launchd/` scheduled job definitions
+- `config/runtime.json` local runtime configuration
+- `templates/daily_summary_prompt.md` summary contract reference
+
+## Quick start
+
+1. Create the local virtualenv and install test tooling:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -U pip pytest
+```
+
+2. Confirm or update `config/runtime.json`.
+
+3. Make sure the Keychain item exists:
+   service `ugreenmailimap`, account `hors.liu@ugreen.com`
+
+4. Run a dry run:
+
+```bash
+.venv/bin/python src/main.py --dry-run
+```
+
+5. Run the test suite:
+
+```bash
+.venv/bin/python -m pytest tests -q
+```
+
+## Scheduling
+
+- Manual runner: `scripts/run_mailautomation.sh`
+- `launchd` plist: `launchd/com.ugreen.mailautomation.plist`
 
 ## Notes
 
