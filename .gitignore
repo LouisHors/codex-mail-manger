@@ -1,0 +1,24 @@
+# Python cache and virtualenvs
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Local runtime data
+state/
+logs/
+payloads/
+output/
+config/runtime.local.json
+
+# macOS and editor noise
+.DS_Store
+.idea/
+.vscode/
+
+# Local worktree directories
+.worktrees/
+worktrees/

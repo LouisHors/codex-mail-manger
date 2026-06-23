@@ -1,0 +1,17 @@
+{
+  "2026-06-23-mail-automation-workflow.md": {
+    "type": "plan",
+    "file": "2026-06-23-mail-automation-workflow.md",
+    "feature": "mail-automation-workflow",
+    "updatedAt": "2026-06-23T06:46:28.049Z"
+  },
+  "2026-06-23-task-implement-mail-automation-workflow.md": {
+    "type": "task",
+    "file": "2026-06-23-task-implement-mail-automation-workflow.md",
+    "title": "Implement mail automation workflow",
+    "relatedDocs": {
+      "plan": "2026-06-23-mail-automation-workflow.md"
+    },
+    "updatedAt": "2026-06-23T06:49:36.623Z"
+  }
+}
