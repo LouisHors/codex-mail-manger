@@ -40,3 +40,14 @@ def test_send_notification_uses_resolved_terminal_notifier(monkeypatch, tmp_path
             {"check": False},
         )
     ]
+
+
+def test_send_notification_passes_message_through(monkeypatch) -> None:
+    calls = []
+
+    monkeypatch.setattr(notifier, "which", lambda _name: "/opt/homebrew/bin/terminal-notifier")
+    monkeypatch.setattr(notifier.subprocess, "run", lambda *args, **kwargs: calls.append((args, kwargs)))
+
+    notifier.send_notification("Mail Automation", "未读 7 / 新增 0")
+
+    assert calls[0][0][0][4] == "未读 7 / 新增 0"

@@ -39,15 +39,18 @@ def collect_incremental_mail(root: Path, runtime_config: dict, state: dict, dry_
 
     if dry_run:
         new_messages = _sample_dry_run_messages()
+        unread_uids = [message["uid"] for message in new_messages]
         payload_path = _write_payload(root / "payloads", checkpoint, new_messages)
     else:
-        new_messages = _fetch_mail(runtime_config, checkpoint, seen_uids)
+        unread_uids, new_messages = _fetch_mail(runtime_config, checkpoint, seen_uids)
         payload_path = _write_payload(root / "payloads", checkpoint, new_messages)
 
     current_checkpoint = datetime.now(timezone.utc).isoformat()
     uids = list(seen_uids.union({message["uid"] for message in new_messages}))
     return {
         "new_messages": new_messages,
+        "unread_count": len(unread_uids),
+        "unread_uids": unread_uids,
         "checkpoint": {
             "last_success_at": current_checkpoint,
             "last_processed_uids": uids,
@@ -56,7 +59,11 @@ def collect_incremental_mail(root: Path, runtime_config: dict, state: dict, dry_
     }
 
 
-def _fetch_mail(runtime_config: dict, checkpoint: datetime, seen_uids: set[str]) -> list[dict[str, str]]:
+def _fetch_mail(
+    runtime_config: dict,
+    checkpoint: datetime,
+    seen_uids: set[str],
+) -> tuple[list[str], list[dict[str, str]]]:
     password = get_keychain_password(
         runtime_config["keychain_account"],
         runtime_config["keychain_service"],
@@ -65,9 +72,11 @@ def _fetch_mail(runtime_config: dict, checkpoint: datetime, seen_uids: set[str])
     try:
         client.login(runtime_config["keychain_account"], password)
         client.select("INBOX")
+        unseen_status, unseen_data = client.uid("search", None, "UNSEEN")
         status, data = client.uid("search", None, "ALL")
+        unseen_uids = unseen_data[0].decode().split() if unseen_status == "OK" and unseen_data and unseen_data[0] else []
         if status != "OK":
-            return []
+            return unseen_uids, []
         messages = []
         for uid in data[0].decode().split():
             if uid in seen_uids:
@@ -82,7 +91,7 @@ def _fetch_mail(runtime_config: dict, checkpoint: datetime, seen_uids: set[str])
             if sent_at <= checkpoint:
                 continue
             messages.append(normalized)
-        return messages
+        return unseen_uids, messages
     finally:
         try:
             client.logout()
@@ -143,6 +152,7 @@ if __name__ == "__main__":
         json.dumps(
             {
                 "new_message_count": len(result["new_messages"]),
+                "unread_count": result["unread_count"],
                 "payload_path": str(result["payload_path"]) if result["payload_path"] else None,
                 "checkpoint": result["checkpoint"],
             },

@@ -22,5 +22,6 @@ def test_collect_incremental_mail_dry_run_skips_external_fetch_and_payload_write
     assert called["fetch"] is False
     assert len(result["new_messages"]) == 1
     assert result["new_messages"][0]["uid"] == "dry-run-001"
+    assert result["unread_count"] == 1
     assert result["payload_path"] is not None
     assert result["payload_path"].exists()

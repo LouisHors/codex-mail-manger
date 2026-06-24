@@ -65,3 +65,4 @@ def test_build_summary_prompt_uses_template_contract_headings() -> None:
     template_text = DEFAULT_TEMPLATE_PATH.read_text()
     assert "# Daily Summary Prompt Contract" in template_text
     assert "Behavior notes:" in prompt
+    assert "do not mention note-writing behavior in the summary output." in prompt.lower()
