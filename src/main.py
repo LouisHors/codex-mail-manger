@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 from collector import collect_incremental_mail
 from note_writer import update_daily_note
@@ -89,7 +90,11 @@ def run_workflow(
                     "last_run_summary": report,
                 }
                 save_state_func(state_path, new_state)
-            notify("Mail Automation", f"Processed {len(new_messages)} new mail(s).", note_result["path"])
+            notify(
+                "Mail Automation",
+                f"Processed {len(new_messages)} new mail(s).",
+                _notification_target(note_result["path"], dry_run),
+            )
             return report
     except Exception as exc:
         report = {
@@ -109,6 +114,13 @@ def _resolve_note_path(root: Path, runtime_config: dict, dry_run: bool) -> Path:
     if dry_run:
         return root / "output" / f"{datetime.now().strftime('%Y-%m-%d')}-dry-run.md"
     return Path(runtime_config["obsidian_output_dir"]) / f"{datetime.now().strftime('%Y-%m-%d')}.md"
+
+
+def _notification_target(note_path: str, dry_run: bool) -> str:
+    path = Path(note_path).expanduser().resolve()
+    if dry_run:
+        return path.as_uri()
+    return f"obsidian://open?path={quote(str(path))}"
 
 
 def _count_section_bullets(markdown: str, title: str) -> int:

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from main import run_workflow
+from main import _notification_target, run_workflow
 
 
 def test_run_workflow_short_circuits_when_no_new_mail(tmp_path: Path) -> None:
@@ -162,3 +162,18 @@ def test_run_workflow_counts_only_top_level_reply_candidates(tmp_path: Path) -> 
 
     assert report["attention_count"] == 2
     assert report["reply_count"] == 1
+
+
+def test_notification_target_uses_file_uri_for_dry_run(tmp_path: Path) -> None:
+    note_path = tmp_path / "2026-06-23-dry-run.md"
+    expected = note_path.resolve().as_uri()
+
+    assert _notification_target(str(note_path), dry_run=True) == expected
+
+
+def test_notification_target_uses_obsidian_url_for_real_run(tmp_path: Path) -> None:
+    note_path = tmp_path / "2026-06-23.md"
+
+    assert _notification_target(str(note_path), dry_run=False) == (
+        f"obsidian://open?path={note_path.resolve().as_posix()}"
+    )

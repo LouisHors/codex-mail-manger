@@ -22,3 +22,6 @@ config/runtime.local.json
 # Local worktree directories
 .worktrees/
 worktrees/
+
+# Shortcut build artifacts
+shortcuts/dist/
