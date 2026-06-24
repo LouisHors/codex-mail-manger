@@ -31,14 +31,25 @@ def run_workflow(
         with acquire_lock(lock_path):
             collection = collector(root=root, runtime_config=runtime_config, state=state, dry_run=dry_run)
             new_messages = collection["new_messages"]
+            unread_count = collection["unread_count"]
             checkpoint = collection["checkpoint"]
+            note_path = _resolve_note_path(root, runtime_config, dry_run)
 
             if not new_messages:
+                note_result = write_note(
+                    note_path=note_path,
+                    summary_markdown="",
+                    checkpoint=checkpoint,
+                    run_timestamp=datetime.now().astimezone().isoformat(timespec="seconds"),
+                    unread_count=unread_count,
+                    new_message_count=0,
+                )
                 report = {
                     "status": "success",
                     "started_at": run_started_at,
                     "new_message_count": 0,
-                    "note_path": "unchanged",
+                    "unread_count": unread_count,
+                    "note_path": note_result["path"] if note_result["updated"] else "unchanged",
                     "attention_count": 0,
                     "reply_count": 0,
                     "reason": "no new mail",
@@ -47,10 +58,11 @@ def run_workflow(
                     new_state = {
                         **state,
                         **checkpoint,
+                        "current_note_path": str(note_path),
                         "last_run_summary": report,
                     }
                     save_state_func(state_path, new_state)
-                notify("Mail Automation", "No new mail found.", None)
+                notify("Mail Automation", _notification_message(unread_count, 0), _notification_target(note_result["path"], dry_run))
                 return report
 
             payload = {
@@ -65,18 +77,19 @@ def run_workflow(
                 runtime_config=runtime_config,
                 dry_run=dry_run,
             )
-            note_path = _resolve_note_path(root, runtime_config, dry_run)
             note_result = write_note(
                 note_path=note_path,
                 summary_markdown=summary["summary_markdown"],
                 checkpoint=checkpoint,
                 run_timestamp=datetime.now().astimezone().isoformat(timespec="seconds"),
+                unread_count=unread_count,
                 new_message_count=len(new_messages),
             )
             report = {
                 "status": "success",
                 "started_at": run_started_at,
                 "new_message_count": len(new_messages),
+                "unread_count": unread_count,
                 "note_path": note_result["path"] if note_result["updated"] else "unchanged",
                 "attention_count": _count_section_bullets(summary["summary_markdown"], "需要关注"),
                 "reply_count": _count_section_bullets(summary["summary_markdown"], "可能需要回复"),
@@ -92,7 +105,7 @@ def run_workflow(
                 save_state_func(state_path, new_state)
             notify(
                 "Mail Automation",
-                f"Processed {len(new_messages)} new mail(s).",
+                _notification_message(unread_count, len(new_messages)),
                 _notification_target(note_result["path"], dry_run),
             )
             return report
@@ -121,6 +134,10 @@ def _notification_target(note_path: str, dry_run: bool) -> str:
     if dry_run:
         return path.as_uri()
     return f"obsidian://open?path={quote(str(path))}"
+
+
+def _notification_message(unread_count: int, new_message_count: int) -> str:
+    return f"未读 {unread_count} / 新增 {new_message_count}"
 
 
 def _count_section_bullets(markdown: str, title: str) -> int:

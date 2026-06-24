@@ -13,13 +13,11 @@ def update_daily_note(
     summary_markdown: str,
     checkpoint: dict,
     run_timestamp: str,
+    unread_count: int,
     new_message_count: int,
 ) -> dict:
-    if new_message_count == 0:
-        return {"updated": False, "path": str(note_path)}
-
-    overview = _extract_section(summary_markdown, "快速概览")
-    run_block = f"### Run {run_timestamp}\n\n{summary_markdown.strip()}\n"
+    overview = _compose_overview(summary_markdown, unread_count, new_message_count)
+    run_block = _compose_run_block(run_timestamp, summary_markdown, unread_count, new_message_count)
     footer = f"{FOOTER_MARKER}\n{json.dumps(checkpoint, ensure_ascii=False)}\n{FOOTER_END}"
 
     if note_path.exists():
@@ -30,7 +28,7 @@ def update_daily_note(
         existing = ""
         runs = []
 
-    runs.append(run_block)
+    runs.insert(0, run_block)
     content = "\n".join(
         [
             f"# {note_path.stem}",
@@ -48,6 +46,39 @@ def update_daily_note(
     )
     note_path.write_text(content)
     return {"updated": True, "path": str(note_path)}
+
+
+def _compose_overview(summary_markdown: str, unread_count: int, new_message_count: int) -> str:
+    base_overview = _extract_section(summary_markdown, "快速概览")
+    lines = [
+        f"- 当前未读：{unread_count}",
+        f"- 本次新增：{new_message_count}",
+    ]
+    if base_overview:
+        lines.append(base_overview)
+    elif new_message_count == 0:
+        lines.append("本次无新增邮件，未刷新摘要内容。")
+    return "\n".join(lines)
+
+
+def _compose_run_block(
+    run_timestamp: str,
+    summary_markdown: str,
+    unread_count: int,
+    new_message_count: int,
+) -> str:
+    metric_lines = [
+        f"### Run {run_timestamp}",
+        "",
+        f"- 当前未读：{unread_count}",
+        f"- 本次新增：{new_message_count}",
+        "",
+    ]
+    if new_message_count == 0:
+        metric_lines.append("本次无新增邮件，未刷新摘要内容。")
+        return "\n".join(metric_lines).strip() + "\n"
+    metric_lines.append(summary_markdown.strip())
+    return "\n".join(metric_lines).strip() + "\n"
 
 
 def _extract_section(markdown: str, title: str) -> str:

@@ -14,4 +14,4 @@ Behavior notes:
 
 - Be aggressive when classifying attention and reply candidates.
 - Prefer short, operator-friendly bullets.
-- Assume the same-day Obsidian note will be updated instead of creating a new note.
+- The note path is execution context only; do not mention note-writing behavior in the summary output.

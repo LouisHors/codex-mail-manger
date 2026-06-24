@@ -6,10 +6,13 @@ from main import _notification_target, run_workflow
 def test_run_workflow_short_circuits_when_no_new_mail(tmp_path: Path) -> None:
     state_updates = []
     notifications = []
+    note_calls = []
 
     def fake_collect(*_args, **_kwargs):
         return {
             "new_messages": [],
+            "unread_count": 7,
+            "unread_uids": ["26", "27", "28", "29", "31", "32", "33"],
             "checkpoint": {"last_success_at": "2026-06-23T01:00:00+00:00", "last_processed_uids": []},
             "payload_path": None,
         }
@@ -19,16 +22,20 @@ def test_run_workflow_short_circuits_when_no_new_mail(tmp_path: Path) -> None:
         dry_run=True,
         collector=fake_collect,
         summarize=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not summarize")),
-        write_note=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not write note")),
+        write_note=lambda **kwargs: note_calls.append(kwargs) or {"updated": True, "path": str(tmp_path / "note.md")},
         notify=lambda title, message, open_target=None: notifications.append((title, message, open_target)),
         save_state_func=lambda path, state: state_updates.append((path, state)),
     )
 
     assert report["status"] == "success"
     assert report["new_message_count"] == 0
-    assert report["note_path"] == "unchanged"
+    assert report["unread_count"] == 7
+    assert report["note_path"] == str(tmp_path / "note.md")
     assert state_updates == []
+    assert note_calls
+    assert note_calls[0]["unread_count"] == 7
     assert notifications
+    assert notifications[0][1] == "未读 7 / 新增 0"
 
 
 def test_run_workflow_updates_note_when_new_mail_exists(tmp_path: Path) -> None:
@@ -42,6 +49,8 @@ def test_run_workflow_updates_note_when_new_mail_exists(tmp_path: Path) -> None:
         payload_path.write_text("{}")
         return {
             "new_messages": [{"uid": "1001"}],
+            "unread_count": 4,
+            "unread_uids": ["1001", "1002", "1003", "1004"],
             "checkpoint": {"last_success_at": "2026-06-23T01:00:00+00:00", "last_processed_uids": ["1001"]},
             "payload_path": payload_path,
         }
@@ -71,12 +80,14 @@ def test_run_workflow_updates_note_when_new_mail_exists(tmp_path: Path) -> None:
 
     assert report["status"] == "success"
     assert report["new_message_count"] == 1
+    assert report["unread_count"] == 4
     assert report["note_path"] == str(tmp_path / "note.md")
     assert report["attention_count"] == 2
     assert report["reply_count"] == 3
     assert summary_calls
     assert note_calls
     assert notifications
+    assert notifications[0][1] == "未读 4 / 新增 1"
 
 
 def test_run_workflow_reports_failure_without_saving_state(tmp_path: Path) -> None:
@@ -88,6 +99,8 @@ def test_run_workflow_reports_failure_without_saving_state(tmp_path: Path) -> No
         payload_path.write_text("{}")
         return {
             "new_messages": [{"uid": "1001"}],
+            "unread_count": 1,
+            "unread_uids": ["1001"],
             "checkpoint": {"last_success_at": "2026-06-23T01:00:00+00:00", "last_processed_uids": ["1001"]},
             "payload_path": payload_path,
         }
@@ -113,6 +126,8 @@ def test_run_workflow_dry_run_does_not_persist_state(tmp_path: Path) -> None:
     def fake_collect(*_args, **_kwargs):
         return {
             "new_messages": [],
+            "unread_count": 3,
+            "unread_uids": ["2001", "2002", "2003"],
             "checkpoint": {"last_success_at": "2026-06-23T01:00:00+00:00", "last_processed_uids": []},
             "payload_path": None,
         }
@@ -138,6 +153,8 @@ def test_run_workflow_counts_only_top_level_reply_candidates(tmp_path: Path) -> 
         payload_path.write_text("{}")
         return {
             "new_messages": [{"uid": "1001"}],
+            "unread_count": 2,
+            "unread_uids": ["1001", "1002"],
             "checkpoint": {"last_success_at": "2026-06-23T01:00:00+00:00", "last_processed_uids": ["1001"]},
             "payload_path": payload_path,
         }
