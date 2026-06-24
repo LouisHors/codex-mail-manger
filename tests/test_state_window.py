@@ -18,9 +18,11 @@ def test_filter_new_messages_keeps_only_messages_after_checkpoint() -> None:
 
 def test_filter_new_messages_deduplicates_previously_seen_uids() -> None:
     checkpoint = datetime.now(timezone.utc) - timedelta(days=1)
+    newer_message_time = checkpoint + timedelta(minutes=5)
+    later_message_time = checkpoint + timedelta(minutes=65)
     messages = [
-        {"uid": "201", "sent_at": "2026-06-23T01:15:00+00:00"},
-        {"uid": "202", "sent_at": "2026-06-23T02:15:00+00:00"},
+        {"uid": "201", "sent_at": newer_message_time.isoformat()},
+        {"uid": "202", "sent_at": later_message_time.isoformat()},
     ]
 
     filtered = filter_new_messages(messages, checkpoint, seen_uids={"201"})
