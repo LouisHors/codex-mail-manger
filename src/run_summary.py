@@ -1,20 +1,37 @@
 from __future__ import annotations
 
-import subprocess
 import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
 
 from prompt_builder import write_prompt_artifacts
 from runtime import ensure_runtime_layout, load_runtime_config, load_state
 
+DEFAULT_PI_TIMEOUT_SECONDS = 900
+REQUIRED_SECTION_HEADINGS = (
+    "# 快速概览",
+    "# 需要关注",
+    "# 可能需要回复",
+    "# 重要邮件详情",
+    "# 运行元数据",
+)
+PI_FAILURE_MARKERS = (
+    "rate-limited",
+    "rate_limit",
+    '"type":"error"',
+    "429:",
+    "Error:",
+)
 
-def summarize_payload(payload_path: Path, runtime_config: dict, dry_run: bool) -> dict:
+def summarize_payload(payload_path: Path, runtime_config: dict, dry_run: bool, note_date: str | None = None) -> dict:
     payload = json.loads(payload_path.read_text())
     output_dir = payload_path.parents[1] / "output"
     prompt_path, manifest_path = write_prompt_artifacts(
         payload,
         output_dir=output_dir,
-        obsidian_note_path=_daily_note_path(runtime_config),
+        obsidian_note_path=_daily_note_path(runtime_config, note_date),
     )
     summary_path = output_dir / f"{prompt_path.stem.replace('-prompt', '')}-summary.md"
 
@@ -45,20 +62,10 @@ def summarize_payload(payload_path: Path, runtime_config: dict, dry_run: bool) -
             "summary_path": str(summary_path),
         }
 
-    subprocess.run(
-        [
-            "codex",
-            "exec",
-            "--skip-git-repo-check",
-            "--output-last-message",
-            str(summary_path),
-            "-",
-        ],
-        input=prompt_path.read_text(),
-        text=True,
-        check=True,
-    )
-    summary_markdown = summary_path.read_text()
+    summary_markdown = _run_pi_summary(prompt_path, runtime_config)
+    if not summary_markdown.endswith("\n"):
+        summary_markdown += "\n"
+    summary_path.write_text(summary_markdown)
     return {
         "summary_markdown": summary_markdown,
         "prompt_path": str(prompt_path),
@@ -67,10 +74,76 @@ def summarize_payload(payload_path: Path, runtime_config: dict, dry_run: bool) -
     }
 
 
-def _daily_note_path(runtime_config: dict) -> str:
+def _run_pi_summary(prompt_path: Path, runtime_config: dict) -> str:
+    """Run the pi agent in non-interactive mode and validate its Markdown output.
+
+    `pi -p` reads the prompt from stdin and writes the answer to stdout. It can exit 0
+    even when the backend fails (e.g. HTTP 429 rate limiting), so the stdout payload is
+    validated instead of trusting the exit code.
+    """
+    executable = runtime_config.get("pi_executable") or shutil.which("pi") or "pi"
+    command = [
+        executable,
+        "-p",
+        "--no-tools",
+        "--no-session",
+        "--no-context-files",
+    ]
+    model = runtime_config.get("pi_model")
+    if model:
+        command.extend(["--model", model])
+
+    try:
+        completed = subprocess.run(
+            command,
+            input=prompt_path.read_text(),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=runtime_config.get("pi_timeout_seconds", DEFAULT_PI_TIMEOUT_SECONDS),
+            env=_pi_env(),
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"pi executable not found: {executable}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"pi timed out after {exc.timeout}s") from exc
+
+    stdout = (completed.stdout or "").strip()
+    stderr = (completed.stderr or "").strip()
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"pi exited with status {completed.returncode}: {_first_line(stderr) or _first_line(stdout)}"
+        )
+    if not stdout:
+        raise RuntimeError(f"pi returned empty output: {_first_line(stderr)}")
+    if any(marker in stdout for marker in PI_FAILURE_MARKERS) and not stdout.lstrip().startswith("#"):
+        raise RuntimeError(f"pi returned an error payload instead of Markdown: {_first_line(stdout)}")
+    if not stdout.lstrip().startswith("#"):
+        raise RuntimeError(f"pi output is not Markdown: {_first_line(stdout)}")
+
+    missing = [heading for heading in REQUIRED_SECTION_HEADINGS if heading not in stdout]
+    if missing:
+        raise RuntimeError(f"pi output is missing required sections: {', '.join(missing)}")
+    return stdout
+
+
+def _pi_env() -> dict:
+    env = dict(os.environ)
+    extra_paths = [str(Path.home() / "bin"), "/opt/homebrew/bin", "/usr/local/bin"]
+    existing = env.get("PATH", "")
+    env["PATH"] = os.pathsep.join([path for path in extra_paths + [existing] if path])
+    return env
+
+
+def _first_line(text: str) -> str:
+    return (text or "").strip().splitlines()[0] if (text or "").strip() else ""
+
+
+def _daily_note_path(runtime_config: dict, note_date: str | None = None) -> str:
     from datetime import datetime
 
-    return str(Path(runtime_config["obsidian_output_dir"]) / f"{datetime.now().strftime('%Y-%m-%d')}.md")
+    stamp = note_date or datetime.now().strftime("%Y-%m-%d")
+    return str(Path(runtime_config["obsidian_output_dir"]) / f"{stamp}.md")
 
 
 def run_summary_cli(root: Path, preview: bool, payload_path: Path | None) -> dict:

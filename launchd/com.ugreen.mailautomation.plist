@@ -11,6 +11,11 @@
     </array>
     <key>WorkingDirectory</key>
     <string>/Users/ugreen/hors/mailautomation</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>/Users/ugreen/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
     <key>StartCalendarInterval</key>
     <dict>
       <key>Hour</key>

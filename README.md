@@ -3,7 +3,7 @@
 Local mail automation workflow for:
 
 - incrementally collecting new IMAP mail from `INBOX`
-- generating a Chinese daily summary with Codex
+- generating a Chinese daily summary with the pi agent
 - updating one Obsidian note per day
 - supporting scheduled and manual reruns
 
@@ -51,4 +51,9 @@ python3 -m venv .venv
 ## Notes
 
 - Runtime data such as payloads, logs, state files, and generated output are intentionally ignored by Git.
-- Git remote is not configured yet.
+- Summarization runs through the `pi` agent in non-interactive mode (`pi -p`). The prompt is
+  piped on stdin and the Markdown summary is read from stdout; `codex` is no longer used.
+- `pi` can exit 0 while returning an error payload (for example HTTP 429 rate limiting), so the
+  runner validates the Markdown structure and fails the run when sections are missing.
+- Optional `config/runtime.json` keys: `pi_executable`, `pi_model`, `pi_timeout_seconds`.
+- Git remote: `git@github.com:LouisHors/codex-mail-manger.git`
