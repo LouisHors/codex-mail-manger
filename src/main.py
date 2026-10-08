@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
@@ -14,6 +15,8 @@ from runtime import acquire_lock, ensure_runtime_layout, load_runtime_config, lo
 def run_workflow(
     root: Path,
     dry_run: bool,
+    note_date: str | None = None,
+    until: str | None = None,
     collector=collect_incremental_mail,
     summarize=summarize_payload,
     write_note=update_daily_note,
@@ -26,14 +29,15 @@ def run_workflow(
     state = load_state(state_path)
     lock_path = root / "state" / "run.lock"
     run_started_at = datetime.now(timezone.utc).isoformat()
+    until_dt = _parse_optional_datetime(until)
 
     try:
         with acquire_lock(lock_path):
-            collection = collector(root=root, runtime_config=runtime_config, state=state, dry_run=dry_run)
+            collection = collector(root=root, runtime_config=runtime_config, state=state, dry_run=dry_run, until=until_dt)
             new_messages = collection["new_messages"]
             unread_count = collection["unread_count"]
             checkpoint = collection["checkpoint"]
-            note_path = _resolve_note_path(root, runtime_config, dry_run)
+            note_path = _resolve_note_path(root, runtime_config, dry_run, note_date)
 
             if not new_messages:
                 note_result = write_note(
@@ -76,6 +80,7 @@ def run_workflow(
                 payload_path=collection["payload_path"],
                 runtime_config=runtime_config,
                 dry_run=dry_run,
+                note_date=note_date,
             )
             note_result = write_note(
                 note_path=note_path,
@@ -118,15 +123,26 @@ def run_workflow(
             "attention_count": 0,
             "reply_count": 0,
             "reason": str(exc),
+            "traceback": traceback.format_exc(),
         }
         notify("Mail Automation Failed", str(exc), None)
         return report
 
 
-def _resolve_note_path(root: Path, runtime_config: dict, dry_run: bool) -> Path:
+def _resolve_note_path(root: Path, runtime_config: dict, dry_run: bool, note_date: str | None = None) -> Path:
+    stamp = note_date or datetime.now().strftime("%Y-%m-%d")
     if dry_run:
-        return root / "output" / f"{datetime.now().strftime('%Y-%m-%d')}-dry-run.md"
-    return Path(runtime_config["obsidian_output_dir"]) / f"{datetime.now().strftime('%Y-%m-%d')}.md"
+        return root / "output" / f"{stamp}-dry-run.md"
+    return Path(runtime_config["obsidian_output_dir"]) / f"{stamp}.md"
+
+
+def _parse_optional_datetime(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _notification_target(note_path: str, dry_run: bool) -> str:
@@ -163,6 +179,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--root", default=Path(__file__).resolve().parents[1], type=Path)
+    parser.add_argument("--note-date", help="Write the summary to YYYY-MM-DD instead of today's note.")
+    parser.add_argument("--until", help="Only collect mail sent at or before this ISO timestamp.")
     args = parser.parse_args()
-    result = run_workflow(root=args.root, dry_run=args.dry_run)
+    result = run_workflow(root=args.root, dry_run=args.dry_run, note_date=args.note_date, until=args.until)
     print(json.dumps(result, ensure_ascii=False, indent=2))

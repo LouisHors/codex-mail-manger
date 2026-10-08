@@ -6,6 +6,14 @@
 bash /Users/ugreen/hors/mailautomation/scripts/run_mailautomation.sh
 ```
 
+## Backfill missed daily summaries
+
+Run the backfill script in chronological order. It uses the same workflow as the scheduled job, writes each run to the requested note date, and advances the checkpoint after each successful day.
+
+```bash
+bash /Users/ugreen/hors/mailautomation/scripts/backfill_mailautomation.sh --from 2026-07-04 --to 2026-07-06
+```
+
 ## Dry run
 
 ```bash

@@ -6,10 +6,28 @@ from email.message import Message
 from email.utils import getaddresses, parsedate_to_datetime
 
 
+CHINESE_CHARSET_FALLBACKS = {
+    "gb2312": ("utf-8", "gb18030", "gbk"),
+    "gbk": ("utf-8", "gb18030"),
+    "gb18030": ("utf-8", "gbk"),
+}
+DEFAULT_CHARSET_FALLBACKS = ("utf-8", "gb18030", "gbk")
+REPLACEMENT_CHARACTER = "\ufffd"
+
+
 def decode_header_value(value: str | None) -> str:
     if not value:
         return ""
-    return str(make_header(decode_header(value))).strip()
+    try:
+        return str(make_header(decode_header(value))).strip()
+    except UnicodeError:
+        decoded = []
+        for chunk, charset in decode_header(value):
+            if isinstance(chunk, str):
+                decoded.append(chunk)
+            else:
+                decoded.append(_decode_bytes(chunk, charset or "utf-8"))
+        return "".join(decoded).strip()
 
 
 def extract_plain_text(message: Message) -> str:
@@ -21,10 +39,36 @@ def extract_plain_text(message: Message) -> str:
                 continue
             payload = part.get_payload(decode=True) or b""
             charset = part.get_content_charset() or "utf-8"
-            return payload.decode(charset, errors="replace").strip()
+            return _decode_bytes(payload, charset).strip()
     payload = message.get_payload(decode=True) or b""
     charset = message.get_content_charset() or "utf-8"
-    return payload.decode(charset, errors="replace").strip()
+    return _decode_bytes(payload, charset).strip()
+
+
+def _decode_bytes(payload: bytes, charset: str) -> str:
+    normalized_charset = charset.lower()
+    encodings = [charset]
+    encodings.extend(CHINESE_CHARSET_FALLBACKS.get(normalized_charset, ()))
+    encodings.extend(DEFAULT_CHARSET_FALLBACKS)
+
+    seen = set()
+    candidates = []
+    for encoding in encodings:
+        encoding_key = encoding.lower()
+        if encoding_key in seen:
+            continue
+        seen.add(encoding_key)
+        try:
+            decoded = payload.decode(encoding)
+        except (LookupError, UnicodeError):
+            continue
+        candidates.append(decoded)
+        if REPLACEMENT_CHARACTER not in decoded:
+            return decoded
+
+    if candidates:
+        return min(candidates, key=lambda candidate: candidate.count(REPLACEMENT_CHARACTER))
+    return payload.decode(charset, errors="replace")
 
 
 def _normalize_addresses(value: str | None) -> list[dict[str, str]]:

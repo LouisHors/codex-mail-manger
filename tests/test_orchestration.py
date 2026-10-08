@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from main import _notification_target, run_workflow
@@ -55,7 +56,7 @@ def test_run_workflow_updates_note_when_new_mail_exists(tmp_path: Path) -> None:
             "payload_path": payload_path,
         }
 
-    def fake_summarize(*, payload_path, runtime_config, dry_run):
+    def fake_summarize(*, payload_path, runtime_config, dry_run, note_date=None):
         summary_calls.append((payload_path, runtime_config, dry_run))
         return {
             "summary_markdown": "# 快速概览\n有 1 封需要关注的邮件。\n\n# 需要关注\n- A\n- B\n\n# 可能需要回复\n- R1\n- R2\n- R3\n\n# 重要邮件详情\n- C\n\n# 运行元数据\n- D",
@@ -90,6 +91,38 @@ def test_run_workflow_updates_note_when_new_mail_exists(tmp_path: Path) -> None:
     assert notifications[0][1] == "未读 4 / 新增 1"
 
 
+def test_run_workflow_can_target_a_backfill_note_date(tmp_path: Path) -> None:
+    note_calls = []
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "runtime.json").write_text(
+        json.dumps({"obsidian_output_dir": str(tmp_path / "notes")}, indent=2) + "\n"
+    )
+
+    def fake_collect(*_args, **_kwargs):
+        return {
+            "new_messages": [],
+            "unread_count": 0,
+            "unread_uids": [],
+            "checkpoint": {"last_success_at": "2026-07-04T01:30:00+00:00", "last_processed_uids": []},
+            "payload_path": None,
+        }
+
+    report = run_workflow(
+        root=tmp_path,
+        dry_run=False,
+        note_date="2026-07-04",
+        collector=fake_collect,
+        summarize=lambda **_kwargs: {"summary_markdown": ""},
+        write_note=lambda **kwargs: note_calls.append(kwargs) or {"updated": True, "path": str(kwargs["note_path"])},
+        notify=lambda *_args, **_kwargs: None,
+        save_state_func=lambda *_args, **_kwargs: None,
+    )
+
+    assert report["status"] == "success"
+    assert note_calls[0]["note_path"] == tmp_path / "notes" / "2026-07-04.md"
+
+
 def test_run_workflow_reports_failure_without_saving_state(tmp_path: Path) -> None:
     saved_state = []
 
@@ -117,6 +150,7 @@ def test_run_workflow_reports_failure_without_saving_state(tmp_path: Path) -> No
 
     assert report["status"] == "failure"
     assert "summary failed" in report["reason"]
+    assert "RuntimeError: summary failed" in report["traceback"]
     assert saved_state == []
 
 
@@ -159,7 +193,7 @@ def test_run_workflow_counts_only_top_level_reply_candidates(tmp_path: Path) -> 
             "payload_path": payload_path,
         }
 
-    def fake_summarize(*, payload_path, runtime_config, dry_run):
+    def fake_summarize(*, payload_path, runtime_config, dry_run, note_date=None):
         return {
             "summary_markdown": "# 快速概览\n概览。\n\n# 需要关注\n- A\n- B\n\n# 可能需要回复\n- R1\n  - reason\n  - action\n\n# 重要邮件详情\n- C\n\n# 运行元数据\n- D",
             "prompt_path": str(tmp_path / "output" / "prompt.md"),

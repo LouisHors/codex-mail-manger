@@ -5,15 +5,16 @@ from collector import filter_new_messages
 
 def test_filter_new_messages_keeps_only_messages_after_checkpoint() -> None:
     checkpoint = datetime(2026, 6, 22, 1, 0, tzinfo=timezone.utc)
+    until = datetime(2026, 6, 23, 1, 0, tzinfo=timezone.utc)
     messages = [
         {"uid": "100", "sent_at": "2026-06-22T00:59:59+00:00"},
         {"uid": "101", "sent_at": "2026-06-22T01:00:01+00:00"},
         {"uid": "102", "sent_at": "2026-06-23T01:15:00+00:00"},
     ]
 
-    filtered = filter_new_messages(messages, checkpoint, seen_uids=set())
+    filtered = filter_new_messages(messages, checkpoint, seen_uids=set(), until=until)
 
-    assert [message["uid"] for message in filtered] == ["101", "102"]
+    assert [message["uid"] for message in filtered] == ["101"]
 
 
 def test_filter_new_messages_deduplicates_previously_seen_uids() -> None:

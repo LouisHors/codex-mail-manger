@@ -15,6 +15,7 @@ def filter_new_messages(
     messages: list[dict[str, str]],
     checkpoint: datetime,
     seen_uids: set[str],
+    until: datetime | None = None,
 ) -> list[dict[str, str]]:
     filtered = []
     for message in messages:
@@ -24,11 +25,19 @@ def filter_new_messages(
         sent_at = datetime.fromisoformat(message["sent_at"])
         if sent_at <= checkpoint:
             continue
+        if until is not None and sent_at > until:
+            continue
         filtered.append(message)
     return filtered
 
 
-def collect_incremental_mail(root: Path, runtime_config: dict, state: dict, dry_run: bool) -> dict:
+def collect_incremental_mail(
+    root: Path,
+    runtime_config: dict,
+    state: dict,
+    dry_run: bool,
+    until: datetime | None = None,
+) -> dict:
     checkpoint_raw = state.get("last_success_at")
     checkpoint = (
         datetime.fromisoformat(checkpoint_raw)
@@ -42,10 +51,10 @@ def collect_incremental_mail(root: Path, runtime_config: dict, state: dict, dry_
         unread_uids = [message["uid"] for message in new_messages]
         payload_path = _write_payload(root / "payloads", checkpoint, new_messages)
     else:
-        unread_uids, new_messages = _fetch_mail(runtime_config, checkpoint, seen_uids)
+        unread_uids, new_messages = _fetch_mail(runtime_config, checkpoint, seen_uids, until=until)
         payload_path = _write_payload(root / "payloads", checkpoint, new_messages)
 
-    current_checkpoint = datetime.now(timezone.utc).isoformat()
+    current_checkpoint = (until or datetime.now(timezone.utc)).isoformat()
     uids = list(seen_uids.union({message["uid"] for message in new_messages}))
     return {
         "new_messages": new_messages,
@@ -63,6 +72,7 @@ def _fetch_mail(
     runtime_config: dict,
     checkpoint: datetime,
     seen_uids: set[str],
+    until: datetime | None = None,
 ) -> tuple[list[str], list[dict[str, str]]]:
     password = get_keychain_password(
         runtime_config["keychain_account"],
@@ -84,11 +94,15 @@ def _fetch_mail(
             fetch_status, fetch_data = client.uid("fetch", uid, "(RFC822)")
             if fetch_status != "OK":
                 continue
-            raw_message = fetch_data[0][1]
+            raw_message = _extract_raw_message(fetch_data)
+            if raw_message is None:
+                continue
             message = message_from_bytes(raw_message)
             normalized = normalize_message(message, uid=uid)
             sent_at = datetime.fromisoformat(normalized["sent_at"])
             if sent_at <= checkpoint:
+                continue
+            if until is not None and sent_at > until:
                 continue
             messages.append(normalized)
         return unseen_uids, messages
@@ -97,6 +111,16 @@ def _fetch_mail(
             client.logout()
         except Exception:
             pass
+
+
+def _extract_raw_message(fetch_data) -> bytes | None:
+    for item in fetch_data or []:
+        if not isinstance(item, tuple) or len(item) < 2:
+            continue
+        raw_message = item[1]
+        if isinstance(raw_message, bytes):
+            return raw_message
+    return None
 
 
 def _write_payload(payload_dir: Path, checkpoint: datetime, messages: list[dict[str, str]]) -> Path:

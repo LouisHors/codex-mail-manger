@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from email import message_from_bytes
 from email.message import EmailMessage
 
 from mail_parser import decode_header_value, extract_plain_text, normalize_message
@@ -21,10 +22,36 @@ def test_decode_header_value_decodes_mime_words() -> None:
     assert decode_header_value("=?utf-8?b?5pel5oql5oC7?=") == "日报总"
 
 
+def test_decode_header_value_falls_back_when_chinese_charset_is_misdeclared() -> None:
+    assert decode_header_value("=?gb2312?b?j0A=?=") == "廆"
+
+
 def test_extract_plain_text_prefers_text_plain_part() -> None:
     message = build_message()
 
     assert extract_plain_text(message) == "Plain body line 1\nline 2"
+
+
+def test_extract_plain_text_falls_back_when_chinese_charset_is_misdeclared() -> None:
+    raw_message = (
+        b"Content-Type: text/plain; charset=gb2312\r\n"
+        b"Content-Transfer-Encoding: base64\r\n"
+        b"\r\n"
+        b"j0DP7sS/uPzQwg==\r\n"
+    )
+
+    assert extract_plain_text(message_from_bytes(raw_message)) == "廆项目更新"
+
+
+def test_extract_plain_text_prefers_utf8_before_chinese_compatibility_fallback() -> None:
+    raw_message = (
+        b"Content-Type: text/plain; charset=gb2312\r\n"
+        b"Content-Transfer-Encoding: base64\r\n"
+        b"\r\n"
+        b"6aG555uu5pu05paw\r\n"
+    )
+
+    assert extract_plain_text(message_from_bytes(raw_message)) == "项目更新"
 
 
 def test_normalize_message_preserves_addresses_and_metadata() -> None:

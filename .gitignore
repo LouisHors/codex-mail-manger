@@ -25,3 +25,4 @@ worktrees/
 
 # Shortcut build artifacts
 shortcuts/dist/
+.horspowers/
