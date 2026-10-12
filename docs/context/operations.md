@@ -45,16 +45,37 @@ stdin and the Markdown summary is read from stdout:
 pi -p --no-tools --no-session --no-context-files < prompt.md
 ```
 
-`pi` can exit 0 even when the backend fails (for example HTTP 429 rate limiting) and then prints the
-error payload on stdout. The runner therefore validates that stdout starts with a Markdown heading
-and contains all required sections; otherwise the run fails without touching the Obsidian note and
-without advancing the checkpoint.
+`pi` can exit 0 even when the backend fails. Two observed shapes:
+
+- HTTP 429 rate limiting prints an error payload on stdout.
+- A prompt near pi's size limit silently returns empty stdout with no usable stderr.
+
+The runner therefore validates the stdout payload (Markdown heading, all required sections) instead
+of trusting the exit code, retries empty output a couple of times, and otherwise fails without
+touching the Obsidian note and without advancing the checkpoint.
+
+### Oversized backlogs are split automatically
+
+A failed run does not advance the checkpoint, so a backlog keeps growing until the prompt exceeds
+what `pi` accepts. Measured against real backlogged mail: ~2.8MB of prompt succeeds, ~3.0MB returns
+empty output (exit 0), and >=12MB fails with `400 {"code":"1261","message":"Prompt 超长"}`.
+
+`run_summary` therefore summarizes in chunks bounded by `PI_MAX_PROMPT_BYTES` (2MB, measured on the
+rendered prompt, not compact JSON) and merges the per-section bodies. A single message larger than
+a chunk has its body shrunk until it fits. This makes a long-neglected backlog recover on its own.
 
 Optional `config/runtime.json` keys:
 
 - `pi_executable` - absolute path to `pi` (defaults to `pi` resolved via `PATH`)
 - `pi_model` - `provider/model` override (defaults to the pi default model)
 - `pi_timeout_seconds` - per-run timeout (default `900`)
+- `pi_empty_output_retries` - retries for empty output (default `2`)
+
+### Error reporting
+
+`pi` always writes startup noise to stderr (`[tapd-cli-env] ...`, extension warnings), so the runner
+skips those lines when reporting the failure reason. Without that filter the notification showed the
+harmless tapd banner instead of the real error.
 
 ## Agent executable not found
 
